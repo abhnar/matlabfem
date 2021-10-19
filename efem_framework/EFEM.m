@@ -21,7 +21,22 @@ classdef EFEM  < handle
             
             
         end
-         
+        
+         function trans = fsweep_fast(obj,fname,material,freq)
+            obj.LoadMesh(fname);
+            obj.setMaterials(material);
+            obj.buildSystem();
+            trans=zeros(length(freq),1);
+            ref=zeros(length(freq),1);
+            trans = obj.fastsweep(freq);
+            
+            obj.FSWEEP.trans= trans;
+            obj.FSWEEP.ref= trans;
+            
+            
+            
+         end
+        
         function meshStatistics(obj)
             
            
@@ -643,6 +658,101 @@ classdef EFEM  < handle
         end
         
         
+        function [E, F, B] = calcEFB(obj,freq)
+            f1 = freq(1);
+            f2 = freq(end);
+            
+            x1 = obj.solveMatrix(f1);
+            x2 = obj.solveMatrix(f2);
+            X = [x1 x2];
+            obj.H = X;
+            [X] = obj.calculate( f1,f2, X);
+            obj.H = orth(obj.H);
+            
+            E = obj.M;
+            F = obj.T;
+            B = obj.B;
+            E(:,obj.pecedge) = [];
+            E(obj.pecedge,:) = [];
+            F(:,obj.pecedge) = [];
+            F(obj.pecedge,:) = [];
+            B(:,obj.pecedge) = [];
+            B(obj.pecedge,:) = [];
+            E = obj.H'*E*obj.H;
+            F = obj.H'*F*obj.H;
+            B = obj.H'*B*obj.H;
+        end
+        function trans = fastsweep(obj,freq)
+            
+            [E, F, B] = obj.calcEFB(freq);
+            fprintf('\nSolved full system for %d freq points.\n',size(obj.H,2));
+            
+            for i=1:length(freq)
+                [A,b]=obj.buildDeterministicSystem(freq(i));
+                A= E + -obj.K0^2*F + (1i*obj.Kz10)*B;
+                b =  obj.H'*b;
+                y = A\b;
+                obj.Efield =  obj.H*y;   
+                
+                ins=(1:obj.MeshData.NEdges);
+                ins(obj.pecedge)=0;
+                ins=find(ins);
+                Et=zeros(1,obj.MeshData.NEdges);
+                Et(ins)=obj.Efield;
+                obj.Efield=Et;
+                trans(i)=obj.calcTrans();
+                printprogress(i,length(freq));
+            end
+            fprintf('\n');
+            
+        end
+        
+        function res = error(obj,f, H)
+            %     fem.solve(f);
+            
+            
+            [A,b]=obj.buildDeterministicSystem(f);
+            A1 = H'*A*H;
+            b1 = H'*b;
+            y = A1\b1;
+            res = vecnorm(b - A*H*y)/vecnorm(b);
+        end
+
+        function [X,x1] = calculate(obj, f1,f2,X)
+            
+            fmid = (f1+f2)/2;
+            r = obj.error(fmid,obj.H);
+            x1 = obj.solveMatrix(fmid);
+            %     X = [X x1];
+            
+            obj.H = orth(full([obj.H x1]));
+            
+            
+            
+            
+            if(r < 0.005)
+                return
+            else
+             
+                [X1,x1] = obj.calculate( f1,fmid,X);
+                [X2,x2] = obj.calculate( fmid,f2,X);
+                
+                
+            end
+            
+        end
+        function x = solveMatrix(obj,f)
+            
+            [A,b]=obj.buildDeterministicSystem(f);
+            
+            
+            x = A\b;
+            
+           
+            
+            
+            
+        end
         
         function trans=calcTrans(obj)
             if(obj.evan)

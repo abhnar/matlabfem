@@ -1,0 +1,8 @@
+path = genpath('../efem_frameworkV5.0');
+addpath(path);
+
+fem = EFEM;
+
+freq = linspace(10.5,11.7,200);
+trans = fem.fsweep_fast('./models/Iris_Filter', 1, freq);
+plot(freq,trans);
