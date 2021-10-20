@@ -3,6 +3,8 @@ clc;
 clearvars;
 lib = genpath('../ssfem_framework');
 addpath(lib);
+lib = genpath('../efem_framework');
+addpath(lib);
 fprintf('Currently running code: ''%s.m''\n',mfilename);
 clear lib;
 %%

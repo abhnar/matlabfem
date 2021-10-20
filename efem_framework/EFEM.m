@@ -53,6 +53,7 @@ classdef EFEM  < handle
             fprintf('\n');
         end
         function obj = LoadMesh(obj,filename)
+            
             tic
             if(~ispc)
                 filename=replace(filename,'\','/');

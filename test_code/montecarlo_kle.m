@@ -1,6 +1,8 @@
 %% Initialize library
 clc;
 clearvars;
+lib = genpath('../efem_framework');
+addpath(lib);
 lib = genpath('../ssfem_framework');
 addpath(lib);
 fprintf('Currently running code: ''%s.m''\n',mfilename);
