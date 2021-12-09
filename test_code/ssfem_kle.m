@@ -23,14 +23,17 @@ f = 2.5;
 
 %% KLE Setup
 kle = KLE3D;
-kle.process(ssfem,2)
-kle.evaluate_Phi('nlambda',10);
+kle.process(ssfem,[2 3 4 ]);
+kle.evaluate_Phi('nlambda',3);
 kle.getKLEData(1);
+kle.setSD([0.8 0.5 0.4 ]);
+kle.setNKL([3 3 3]);
 
 %% Spectral Stochastic
-ssfem.init(100,'kle',true,'p_order',2, 'nklterms', 3);
-kle.KLDATA.sd = 0.8;
-ssfem.setSeed(2);
+ssfem.init(100,'kle',true,'p_order',2);
+
+ssfem.setSeed(1);
 ssfem.assignSpatialMaterialVariation(kle);
 ssfem.ssfemkle(f);
 ssfem.plot('current');
+hold on;

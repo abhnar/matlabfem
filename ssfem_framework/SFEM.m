@@ -6,11 +6,12 @@ classdef SFEM < handle & EFEM
         CACHE;
         seed = 1;
         RV;
-        KLE;
+        SETUP;
         nkl = -1;
         p_order = -1;
         xi;
         rescnt = 0;
+        ID = -1;
         
     end
     
@@ -23,7 +24,32 @@ classdef SFEM < handle & EFEM
      end
     
     methods
-        
+        function mats = getPermittivity(sfem, doms)
+            mats = sfem.MeshData.MatLibrary(doms);
+        end
+        function clear(sfem)
+            sfem.CAHCE = [];
+            sfem.d_stoch = [];
+            sfem.RESULTS = [];
+            sfem.SETUP = [];
+            sfem.B= [];
+            sfem.RHS= [];
+            sfem.E_freespace= [];
+            sfem.F_freespace= [];
+            sfem.E_material= [];
+            sfem.F_material= [];
+            sfem.EIGSYS = [];
+            sfem.temp = [];
+            sfem.ipfacefield = [];
+            sfem.pecedge = [];
+            sfem.EM = [];
+            sfem.MeshData = [];
+            sfem.xi = [];
+        end
+        function ssfem = SFEM()
+            x = 0;while(x<10000)x = round(rand*100000); end; ssfem.ID = x;
+             
+        end
         function init(mc, R, varargin)
             %% R = number of random samples
             % 'kle', true <- enables KLE
@@ -75,23 +101,26 @@ classdef SFEM < handle & EFEM
             cprintf('*black','\tInput Standard Deviation: %2.2f\n', sd);
         end
         
-        
+
         function assignSpatialMaterialVariation(ssfem, kle, type)
             %% Generate samples that are spatially correlated. The spatial
             %  correlation is represented by the KL Expansion
-            kldata = kle.CORR;
-            cprintf('*blue','-----------------------------------------------------\n');
-            cprintf('*blue','         %s Simulation (KLE - Spatial)         \n', type);
-            cprintf('*blue','-----------------------------------------------------\n');
-          
             
-            %cprintf('_blue','                                         \n');
+            cprintf('*Blue','-----------------------------------------------------\n');
+            cprintf('*Blue','         %s Simulation (KLE - Spatial)         \n', type);
+            cprintf('*Blue','-----------------------------------------------------\n');
+            
+            ndom = length(kle.KLSet);
             cprintf('*black','\tRandom seed       : %d\n', ssfem.seed);
-            cprintf('_blue','KL Information\n');
-            cprintf('*black','\tDomain            : %d\n', kldata.domain);
-            cprintf('*black','\tCorrelation Length: %e m (factor = %2.2f)\n', kldata.corlen, kle.KLDATA.corlenfactor);
-            cprintf('*black','\tNumber of KL Terms: %d\n', ssfem.nkl);
-        end
+            cprintf('*black','\tNumber of Domains : %d\n', ndom);
+            for i=1:ndom
+                cprintf('*black','\t\tDomain : %d\n', kle.KLSet{i}.domain);
+                cprintf('*black','\t\t\tStandard Deviation     : %2.2f\n', kle.KLSet{i}.sd);
+                cprintf('*black','\t\t\tCorrelation Length     : %e m (factor = %2.2f)\n', kle.KLSet{i}.CORR.corlen, kle.KLSet{i}.corlenfactor);
+                cprintf('*black','\t\t\tNumber of KL Terms     : %d\n', kle.KLSet{i}.nkl);
+            end
+            
+         end
         
         function plot(ssfem,type)
             if nargin <2
@@ -122,8 +151,53 @@ classdef SFEM < handle & EFEM
                 plot(b,a)
             end
         end
+        function logresult(sfem)
+            if ~exist('.results', 'dir')
+                mkdir('.results');
+            end
+            timestamp = datestr(datetime);
+            doms = strtrim(sprintf('%d ',sfem.RESULTS.domains));
+            sds = strtrim(sprintf('%f ',sfem.RESULTS.sds));
+            nkls = strtrim(sprintf('%d ',sfem.RESULTS.nkls));
+            means = strtrim(sprintf('%f ', real(sfem.RESULTS.means)));
+            res= sprintf('%s %f %d %f %f %d (%s) (%s) (%s) (%s) %f', sfem.RESULTS.type, sfem.RESULTS.f,sfem.RESULTS.Rn, ...
+                sfem.RESULTS.means21,sfem.RESULTS.stds21,sfem.RESULTS.p_order,doms, means, sds, nkls,sfem.RESULTS.solvetime);
+            id = fopen('.results/result_log.txt','a+');
+%             disp(id)
+            fwrite(id, sprintf('%s %d  %s\n',timestamp, sfem.ID, res));
+            fclose(id);
+        end
         function pushResult(mc)
+            fname = ['.results/',strrep(strrep(datestr(datetime),' ','_'),':','-'),'.mat'];
             
+            if ~exist('.results', 'dir')
+                mkdir('.results');
+            end
+            
+            if ~exist('.results/result_cnt.txt','file')
+%                 disp('Fresh Result Set');
+                id = fopen('.results/result_cnt.txt','w');
+                fwrite(id,'0');
+                fclose(id);
+                
+            end
+
+            id = fopen('.results/result_cnt.txt','r');
+            x = str2double(fgetl(id));
+%             disp(x);
+            fclose(id);
+           
+            id = fopen('.results/result_table.txt','a+');
+%             disp(id)
+            fwrite(id, sprintf('%d %d %s N\n',mc.ID, x+1,fname));
+            fclose(id);
+
+            id = fopen('.results/result_cnt.txt','w');
+            fwrite(id,num2str(x+1) );
+            fclose(id);
+            mc.RESULTS.saved = true;
+            RESULTS = mc.RESULTS;
+            save(fname,'RESULTS','-mat');
             mc.CACHE{mc.rescnt+1} =  mc.RESULTS;
             mc.rescnt = mc.rescnt +1;
         end
@@ -150,53 +224,6 @@ classdef SFEM < handle & EFEM
             end
             rng(mc.seed);
         end
-        
-        function val = getNorm(mc,kle,i1)
-            
-            supSet = kle.KLDATA.supSet;
-            a=supSet.Co(:,:,1);
-            b=supSet.Co(:,:,2);
-            c=supSet.Co(:,:,3);
-            d=supSet.Co(:,:,4);
-            V=supSet.V;
-            
-            
-            tet=supSet.tet;
-            
-            
-            Evec = kle.CORR.Evec;
-            
-            ix1 = supSet.ix1;
-            nds = supSet.nds;
-            
-            
-            
-            eigvec1=Evec(:,i1);
-            eigvec2=Evec(:,i1);
-            val=0;
-            for i=1:length(tet)
-                
-                %tetid=r(i);
-                
-                lix = i;
-                Xc=mean(nds(tet(lix,:),:));
-                
-                
-                integ=0;
-                for k=1:4
-                    Lk = @(x) 1/(6*V(lix))*(a(lix,k)+b(lix,k)*x(1) +c(lix,k)*x(2)+d(lix,k)*x(3));
-                    
-                    integ = integ+Lk(Xc)*eigvec1(tet(lix,k))*eigvec2(tet(lix,k));
-                end
-                
-                
-                val=val+integ*V(lix);
-            end
-            
-            
-            
-            val = sqrt(val);
-            
-        end
+     
     end
 end

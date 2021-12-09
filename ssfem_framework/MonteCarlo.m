@@ -19,75 +19,125 @@ classdef MonteCarlo< SFEM
        
         
     
-        function assignRandomMaterialVariation(mc, domain,sd)
-            assignRandomMaterialVariation@SFEM(mc, domain,sd, 'MonteCarlo');
-           
-            mat_idx = find(mc.MeshData.TetType == domain);
+        function assignRandomMaterialVariation(mc, domains,sds)
+            assignRandomMaterialVariation@SFEM(mc, domains,sds, 'MonteCarlo');
+            rng(mc.seed);
+            mc.xi = randn(mc.Rn,length(domains));
             epsr = mc.MeshData.MatLibrary(mc.MeshData.TetType);
             epsr = repmat(epsr,[1 mc.Rn]);
-            
-            rng(mc.seed);
-            mc.xi = randn(mc.Rn,1);
-            xi_i = repmat(mc.xi',[length(mat_idx),1]);
-            epsr(mat_idx,:) = epsr(mat_idx,:)+ sd*xi_i;
+            for it=1:length(domains)
+                domain = domains(it);
+                sd = sds(it);
+                mat_idx = find(mc.MeshData.TetType == domain);
+                
+
+                
+
+                xi_i = repmat(mc.xi(:,it)',[length(mat_idx),1]);
+                epsr(mat_idx,:) = epsr(mat_idx,:)+ sd*xi_i;
+            end
             mc.epsilon_r = epsr;
-            
+
+            mc.SETUP.domains = domains;
+            mc.SETUP.sds = sds;
+            mc.SETUP.nkls = zeros(size(sds));
+            mc.SETUP.means = mc.getPermittivity(mc.SETUP.domains);
+            mc.SETUP.type = 'MCS_RV';
+
+            mc.SETUP.p_order = -1;
+
         end
-        
-        
+
+
         function assignSpatialMaterialVariation(mc, kle)
-        %% Generate samples that are spatially correlated. The spatial 
-        %  correlation is represented by the KL Expansion
-        
-        
-        assignSpatialMaterialVariation@SFEM(mc, kle, 'Monte Carlo');
-        
-        kldata = kle.CORR;
-        
-        mat_idx = find(mc.MeshData.TetType == kldata.domain);
-        epsr = mc.MeshData.MatLibrary(mc.MeshData.TetType);
-        
-        %repeat epsr  Rn times, there are Rn columns, each column is a
-        %sample
-        epsr = repmat(epsr,[1 mc.Rn]);
-        rng(mc.seed);
-        mc.xi = randn(mc.Rn,mc.nkl);
-        %KL sum mean + Sigma_i=1^nkl sqrt(Lambda_i)*Phi_i*x_i;
-        for i=1:mc.nkl
-            Phi_i = kldata.Phi{i};  %1 column, NT rows
-            Phi_i = repmat(Phi_i,[1 mc.Rn]);  %Rn columns, NT rows
-            lambda_i = kldata.Lambda(i);
-            norm_i = kldata.Norms(i);
-            norm_i = mc.getNorm(kle,i);
-            xi_i = mc.xi(:,i)'; % Rn columns, 1 Row
-            xi_i = repmat(xi_i,[mc.MeshData.NT,1]); %Rn columns, NT rows
-            epsr = epsr + sqrt(lambda_i)*Phi_i.*xi_i*kle.KLDATA.sd/norm_i;
-        end
-        mc.epsilon_r = epsr;
-        mean_sd = mean(std(epsr(mat_idx,:)'));
-        cprintf('*black','\tMean Standard Deviation: %f\n', mean_sd);
+            %% Generate samples that are spatially correlated. The spatial
+            %  correlation is represented by the KL Expansion
+
+
+            assignSpatialMaterialVariation@SFEM(mc, kle, 'Monte Carlo');
+            epsr = mc.MeshData.MatLibrary(mc.MeshData.TetType);
+
+            %repeat epsr  Rn times, there are Rn columns, each column is a
+            %sample
+            epsr = repmat(epsr,[1 mc.Rn]);
+            mc.SETUP.N = kle.getSdim();
+            rng(mc.seed);
+            mc.xi = randn(mc.Rn,mc.SETUP.N);
+
+            for j = 1:length(kle.KLSet)
+                KL = kle.KLSet{j};
+
+
+                mat_idx = find(mc.MeshData.TetType == KL.domain);
+               
+                
+                %KL sum mean + Sigma_i=1^nkl sqrt(Lambda_i)*Phi_i*x_i;
+                for i=1:KL.nkl
+                    
+                    k = (j-1)*KL.nkl + i;
+%                     disp(k);
+                    Phi_i = KL.CORR.Phi{i};  %1 column, NT rows
+                    Phi_i = repmat(Phi_i,[1 mc.Rn]);  %Rn columns, NT rows
+                    lambda_i = KL.CORR.Lambda(i);
+
+                   
+                    xi_i = mc.xi(:,k)'; % Rn columns, 1 Row
+                    xi_i = repmat(xi_i,[mc.MeshData.NT,1]); %Rn columns, NT rows
+                    epsr = epsr + sqrt(lambda_i)*Phi_i.*xi_i*KL.sd;
+                end
+                mc.epsilon_r = epsr;
+                mean_sd = mean(std(epsr(mat_idx,:)'));
+                cprintf('*black','\tMean Standard Deviation of domain %d: %f\n',KL.domain, mean_sd);
+            end
+
+            mc.SETUP.domains = kle.getDomains();
+            mc.SETUP.sds = kle.getSDs();
+            mc.SETUP.nkls = kle.getNKLs();
+            mc.SETUP.means = mc.getPermittivity(mc.SETUP.domains);
+            mc.SETUP.type = 'MCS_KLE';
+            mc.SETUP.p_order = -1;
         end
         
         function MCSimulation(mc,f)
-        mc.calcElementalMatrix();
-        mc.calcB();
-        ref=zeros(mc.Rn,1);
-        trans=zeros(mc.Rn,1);
-        N = mc.Rn;
-        WaitMessage = parfor_wait(N, 'Waitbar', true);
-        parfor i=1:N
-            WaitMessage.Send;
-            mc.Assemble(mc.epsilon_r(:,i));
-            mc.solve(f);
-            ref(i)=mc.calcRef();
-            trans(i)=mc.calcTrans();
-        end
-        WaitMessage.Destroy();
-        mc.RESULTS.R=ref;
-        mc.RESULTS.T=trans;
-        mc.RESULTS.f = f;
-        mc.RESULTS.seed = mc.seed;
-        
+            mc.calcElementalMatrix();
+            mc.calcB();
+            ref=zeros(mc.Rn,1);
+            trans=zeros(mc.Rn,1);
+            N = mc.Rn;
+            WaitMessage = parfor_wait(N, 'Waitbar', true);
+            parfor i=1:N
+                WaitMessage.Send;
+                mc.Assemble(mc.epsilon_r(:,i));
+                mc.solve(f);
+                ref(i)=mc.calcRef();
+                trans(i)=mc.calcTrans();
+            end
+            WaitMessage.Destroy();
+            mc.RESULTS.R=ref;
+            mc.RESULTS.T=trans;
+            mc.RESULTS.f = f;
+            mc.RESULTS.seed = mc.seed;
+
+           
+            [a,b] = ksdensity(mc.RESULTS.T);
+            mc.RESULTS.xpdf = b;
+            mc.RESULTS.ypdf = a;
+            mc.RESULTS.means21 = mean(mc.RESULTS.T);
+            mc.RESULTS.stds21 = std(mc.RESULTS.T);
+            
+            mc.RESULTS.domains = mc.SETUP.domains ;
+            mc.RESULTS.sds = mc.SETUP.sds;
+            mc.RESULTS.means = mc.SETUP.means;
+            mc.RESULTS.nkls = mc.SETUP.nkls;
+            mc.RESULTS.p_order = mc.SETUP.p_order;
+
+            mc.RESULTS.solvetime = -1;
+            mc.RESULTS.type = mc.SETUP.type;
+            mc.RESULTS.Rn = mc.Rn;
+            mc.RESULTS.saved = false;
+            mc.pushResult();
+            mc.logresult();
+
         end
         
        

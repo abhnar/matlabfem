@@ -21,12 +21,15 @@ mcs.buildSystem();
 
 f = 2.5;
 
+%% KLE Setup
 kle = KLE3D;
-kle.process(mcs,2)
+kle.process(mcs,[2 3 4 ]);
 kle.evaluate_Phi('nlambda',3);
 kle.getKLEData(1);
-kle.KLDATA.sd = 0.8;
-mcs.init(100,'kle',true,'p_order',2, 'nklterms', 3);
+kle.setSD([0.8 0.5 0.4]);
+kle.setNKL([3 3 3]);
+
+mcs.init(100,'kle',true);
 mcs.setSeed(1);
 mcs.assignSpatialMaterialVariation(kle);
 mcs.MCSimulation(f);

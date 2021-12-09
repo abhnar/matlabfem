@@ -2,6 +2,7 @@ classdef SSFEM<  SFEM
     properties
 
         d_stoch;
+        show_progress = true;
 
         
     end
@@ -9,131 +10,250 @@ classdef SSFEM<  SFEM
     methods
         
         
-        function assignRandomMaterialVariation(ssfem, domain, sd)
+        function assignRandomMaterialVariation(ssfem, domains, sds)
             
-            assignRandomMaterialVariation@SFEM(ssfem, domain, sd, 'SSFEM');
-            
-            ssfem.buildSystem();
-            
-            epr=ssfem.MeshData.TetType*0;
-            
-            temp=ssfem.MeshData.TetType;
-            temp(temp~=domain)=0;
-            temp(temp==domain)=1;
-            epr = sd.*(temp);
-            
-            ssfem.Assemble(epr);
-            
-            ssfem.RV.T = ssfem.T;
-            ssfem.RV.M = ssfem.M;
-            ssfem.RV.T(ssfem.pecedge,:) = [];
-            ssfem.RV.T(:,ssfem.pecedge) = [];
-            ssfem.RV.M(ssfem.pecedge,:) = [];
-            ssfem.RV.M(:,ssfem.pecedge) = [];
-            
+            assignRandomMaterialVariation@SFEM(ssfem, domains, sds, 'SSFEM');
+            ssfem.SETUP.TSet = cell(length(domains),1);
+            for it = 1:length(domains)
+                domain = domains(it);
+                sd = sds(it);
+
+                ssfem.buildSystem();
+                
+               
+                
+                temp=ssfem.MeshData.TetType;
+                temp(temp~=domain)=0;
+                temp(temp==domain)=1;
+                epr = sd.*(temp);
+                
+                ssfem.Assemble(epr);
+                
+                ssfem.SETUP.Tset{it+1} = ssfem.T;
+                
+                ssfem.SETUP.Tset{it+1}(ssfem.pecedge,:) = [];
+                ssfem.SETUP.Tset{it+1}(:,ssfem.pecedge) = [];
+                
+            end
+            ssfem.SETUP.N = length(domains);
+            ssfem.SETUP.P = PC.getP(ssfem.SETUP.N,ssfem.p_order);
+            ssfem.SETUP.cijk = PC.c_ijk(ssfem.SETUP.N,ssfem.p_order,1);
+            ssfem.SETUP.Psi = PC.getHermite_PC(ssfem.SETUP.N,ssfem.p_order);
+
+
+            ssfem.SETUP.domains = domains;
+            ssfem.SETUP.means = ssfem.getPermittivity(ssfem.SETUP.domains);
+            ssfem.SETUP.sds = sds;
+            ssfem.SETUP.type = 'SSFEM_RV';
+
+            ssfem.SETUP.nkls = zeros(size(sds));
+            ssfem.SETUP.p_order = ssfem.p_order;
+
+            rng(ssfem.seed);
+            ssfem.xi = randn(ssfem.Rn,ssfem.SETUP.N);
+
+            fprintf('\t');
+            cprintf('_black','Stochastic Setup\n');
+            cprintf('*black','\t\tN : %d\n', ssfem.SETUP.N);
+            cprintf('*black','\t\tP : %d\n', ssfem.SETUP.P);
+ 
         end
         
         function assignSpatialMaterialVariation(ssfem, kle)
             
-              
-            assignSpatialMaterialVariation@SFEM(ssfem, kle, 'SSFEM');
+             assignSpatialMaterialVariation@SFEM(ssfem, kle, 'SSFEM');
             
             
             
             ssfem.buildSystem();
             
             
-            
-            for i=2:ssfem.nkl+1
-                norm_i = ssfem.getNorm(kle,i-1);
-                epr = kle.KLDATA.sd*sqrt(kle.CORR.Lambda(i-1))*kle.CORR.Phi{i-1}/norm_i;
-                ssfem.Assemble(epr);
-                ssfem.KLE.Tset{i} =  ssfem.T;
-                ssfem.KLE.Tset{i}(:,ssfem.pecedge)=[];
-                ssfem.KLE.Tset{i}(ssfem.pecedge,:)=[];
+            for j=1:length(kle.KLSet)
+                KL = kle.KLSet{j};
+                for i=1:KL.nkl
+                    k = (j-1)*KL.nkl + i +1;
+%                     disp(k)
+                    
+                    epr = KL.sd*sqrt(KL.CORR.Lambda(i))*KL.CORR.Phi{i};
+                    ssfem.Assemble(epr);
+                    ssfem.SETUP.Tset{k} =  ssfem.T;
+                    ssfem.SETUP.Tset{k}(:,ssfem.pecedge)=[];
+                    ssfem.SETUP.Tset{k}(ssfem.pecedge,:)=[];
+                end
             end
-            
-            
-            
-            
-            
+
+            ssfem.SETUP.N = kle.getSdim();
+            ssfem.SETUP.P = PC.getP(ssfem.SETUP.N,ssfem.p_order);
+            ssfem.SETUP.cijk = PC.c_ijk(ssfem.SETUP.N,ssfem.p_order,1);
+            ssfem.SETUP.Psi = PC.getHermite_PC(ssfem.SETUP.N,ssfem.p_order);
+
+            ssfem.SETUP.domains = kle.getDomains();
+            ssfem.SETUP.means = ssfem.getPermittivity(ssfem.SETUP.domains);
+            ssfem.SETUP.sds = kle.getSDs();
+            ssfem.SETUP.nkls = kle.getNKLs();
+            ssfem.SETUP.type = 'SSFEM_KLE';
+            ssfem.SETUP.p_order = ssfem.p_order;
+
+            rng(ssfem.seed);
+            ssfem.xi = randn(ssfem.Rn,ssfem.SETUP.N);
+
+            fprintf('\t');
+            cprintf('_black','Stochastic Setup\n');
+            cprintf('*black','\t\tN : %d\n', ssfem.SETUP.N);
+            cprintf('*black','\t\tP : %d\n', ssfem.SETUP.P);
+        
         end
         
         function ssfemkle(ssfem,f)
             ssfem.buildSystem();
             [K, b]=ssfem.buildDeterministicSystem(f);
             
-            Tset = ssfem.KLE.Tset;
+            Tset = ssfem.SETUP.Tset;
             Tset{1} = K;
             for i=2:length(Tset)
                 Tset{i} = -ssfem.K0^2*Tset{i};
             end
-            [cijk,P]=PC.c_ijk(ssfem.nkl,ssfem.p_order,1);
-            ssfem.RESULTS.P=P;
-            ssfem.RESULTS.p_order=ssfem.p_order;
-            ssfem.RESULTS.KLterms=ssfem.nkl;
-            ssfem.RESULTS.type = 'KLE';
+
+            cijk = ssfem.SETUP.cijk;
+            P = ssfem.SETUP.P;
+            
+            
+            
             Ndof = size(K,1);
-            Stemp = cell(P,P);
-            ST = cell(P);
+            ssfem.SETUP.Ndof = Ndof;
+            X = cell(ssfem.SETUP.P,ssfem.SETUP.P);
+            Y = cell(ssfem.SETUP.P,ssfem.SETUP.P);
+            VALS = cell(ssfem.SETUP.P,ssfem.SETUP.P);
+
+            if(ssfem.show_progress)
+                wb = waitbar(0,"Assembling SSFEM",'Name', 'SSFEM');
+            end
+
             for j = 1 : P
                 
-                for k = 1 : P
+                for k = j : P
                     S = sparse(Ndof,Ndof);
                     
-                    for i =1 : 2
+                    for i = 1 : ssfem.SETUP.N + 1
                         S =  S + cijk{i}(j,k) * Tset{i};
                     end
-                    Stemp{j,k}=S;
+                    
+                    [x,y] = find(S);
+                    val = S(S~=0);
+                    X{j,k} = x;
+                    Y{j,k} = y;
+                    VALS{j,k} = val;
                     
                     
                 end
                 
-                ST{j}=horzcat(Stemp{j,:});
+                if(ssfem.show_progress)
+                    waitbar(j/P,wb,"Assembling SSFEM")
+                end
                 
             end
-            ST=vertcat(ST{:});
-            clear Stemp;
+            
+            for j = 1 : P
+                for k = 1 : j
+                    X{j,k} = X{k,j} ;
+                    Y{j,k} = Y{k,j} ;
+                    VALS{j,k} = VALS{k,j};
+                end
+            end
+            for j = 1 : P
+                for k = 1 : P
+                    X{j,k} = X{j,k} + (j-1)*Ndof;
+                    Y{j,k} = Y{j,k} + (k-1)*Ndof;
+                    
+                end
+            end
+
+            if(ssfem.show_progress)
+                close(wb);
+            end
+
+            X = vertcat(X{:});
+            Y = vertcat(Y{:});
+            VALS= vertcat(VALS{:});
+            ST = sparse(X,Y,VALS);
+            clear X Y VALS S x y val;
             
             G=zeros(Ndof*P,1);
             G(1:Ndof)=b;
-            disp('Solving');
+            fprintf('Solving\n');
             tic;
             xr = ST\G;
             t1 = toc;
+            cprintf('*black','\tSolution time     : %f sec\n', t1);
             ssfem.d_stoch = reshape(xr,Ndof,P);
-            ssfem.RESULTS.solvetime = t1;
+            
             
             ssfem.d_stoch = reshape(xr,Ndof,P);
+            
+            
+            ssfem.EvaluatePCE();
+
+            ssfem.RESULTS.T = ssfem.calcTrans_Stoch(ssfem.SETUP.Et);
+            [a,b] = ksdensity(ssfem.RESULTS.T);
+            ssfem.RESULTS.xpdf = b;
+            ssfem.RESULTS.ypdf = a;
+            ssfem.RESULTS.means21 = mean(ssfem.RESULTS.T);
+            ssfem.RESULTS.stds21 = std(ssfem.RESULTS.T);
+            
+            ssfem.RESULTS.domains = ssfem.SETUP.domains ;
+            ssfem.RESULTS.sds = ssfem.SETUP.sds;
+            ssfem.RESULTS.nkls = ssfem.SETUP.nkls;
             ssfem.RESULTS.solvetime = t1;
             ssfem.RESULTS.N = size(ST,1);
             ssfem.RESULTS.NZ = nnz(ST);
-            d = ssfem.d_stoch;
+            ssfem.RESULTS.P=P;
+            ssfem.RESULTS.p_order=ssfem.SETUP.p_order;
+            
+            ssfem.RESULTS.means = ssfem.SETUP.means;
+            ssfem.RESULTS.type = ssfem.SETUP.type;
+            ssfem.RESULTS.f = f;
+            ssfem.RESULTS.seed = ssfem.seed;
+            ssfem.RESULTS.Rn = ssfem.Rn;
+            ssfem.RESULTS.saved = false;
+            ssfem.pushResult();
+            ssfem.logresult();
+        end
+
+        function resample(ssfem, seed, Rn)
+            ssfem.RESULTS.seed = seed;
+            ssfem.Rn = Rn;
+            rng(seed);
+            ssfem.xi = randn(Rn, ssfem.SETUP.N);
+            ssfem.EvaluatePCE();
+            ssfem.RESULTS.T = ssfem.calcTrans_Stoch(ssfem.SETUP.Et);
+            
+            ssfem.RESULTS.seed = ssfem.seed;
+            ssfem.pushResult();
+            ssfem.logresult();
+        end
+
+        function EvaluatePCE(ssfem)
             disp('Evaluating PCE');
-            Psi=PC.getHermite_PC(ssfem.nkl,ssfem.p_order);
-            u  = zeros(Ndof,ssfem.Rn);
-            rng(ssfem.seed);
-            ssfem.xi = randn(ssfem.Rn,ssfem.nkl);
-            for j = 1:P
+            d = ssfem.d_stoch;
+
+            Psi=ssfem.SETUP.Psi;
+            u  = zeros(ssfem.SETUP.Ndof,ssfem.Rn);
+            
+            for j = 1:ssfem.SETUP.P
                 psi_j = Psi{j}(ssfem.xi);
                 d_j   = d(:,j);
                 %                 u= u + d_j*psi_j';
-                psi_j = repmat(psi_j',[ Ndof 1]);
+                psi_j = repmat(psi_j',[ ssfem.SETUP.Ndof 1]);
                 d_j = repmat(d_j,[1 ssfem.Rn]);
                 u= u + d_j.*psi_j;
-                printprogress(j,P);
+                printprogress(j,ssfem.SETUP.P);
             end
             
             ins=(1:ssfem.MeshData.NEdges);
             ins(ssfem.pecedge)=0;
             Et=zeros(ssfem.MeshData.NEdges,ssfem.Rn);
             Et(ins~=0,:)=u;
-            
-            ssfem.calcTrans_Stoch(Et);
-            ssfem.RESULTS.f = f;
-            ssfem.RESULTS.seed = ssfem.seed;
-            ssfem.pushResult();
-            
+            ssfem.SETUP.Et = Et;
             
         end
         
@@ -142,7 +262,7 @@ classdef SSFEM<  SFEM
             ssfem.buildSystem();
             [K, b]=ssfem.buildDeterministicSystem(f);
             T =-ssfem.K0^2* ssfem.RV.T;
-            M = ssfem.RV.M;
+          
             Tset = cell(2,1);
             Tset{1}=K;
             Tset{2}=T;
@@ -168,6 +288,7 @@ classdef SSFEM<  SFEM
                 ST{j}=horzcat(Stemp{j,:});
                 
             end
+
             ST=vertcat(ST{:});
             clear Stemp;
             
@@ -185,8 +306,7 @@ classdef SSFEM<  SFEM
             disp('Evaluating PCE');
             Psi=PC.getHermite_PC(1,ssfem.p_order);
             u  = zeros(Ndof,ssfem.Rn);
-            rng(ssfem.seed);
-            ssfem.xi = randn(ssfem.Rn,1);
+            
             for j = 1:P
                 psi_j = Psi{j}(ssfem.xi);
                 d_j   = d(:,j);
@@ -337,7 +457,7 @@ classdef SSFEM<  SFEM
             
             trans=sqrt(trans/obj.ippow);
             %trans=abs(trans);
-            obj.RESULTS.T=trans;
+            
             
             
         end

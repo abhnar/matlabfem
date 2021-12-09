@@ -4,6 +4,10 @@ classdef PC
     end
     
     methods(Static)
+
+        function P = getP(m,n)
+            P = factorial(m+n)/(factorial(m)*factorial(n));
+        end
         function convertsymtovar(KLterms,p_order)
             
             
