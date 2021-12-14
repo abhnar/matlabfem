@@ -3,9 +3,32 @@ classdef Utilities
         Value
     end
     methods
-        function test(a)
-            disp('Test');
+        function integ = volumeIntegral(obj, f, vertices, Xc)
+            if(size(vertices) == [4 3])
+                vertices = vertices';
+            elseif~(size(vertices) == [3 4])
+                error("Invalid vertices should supply a 4x3 matrix")
+            end
+            v1 = vertices(:,1);
+            v2 = vertices(:,2);
+            v3 = vertices(:,3);
+            v4 = vertices(:,4);
+
+            J = [v2-v1, v3-v1, v4-v1];
+            
+            Ut = Utilities;
+            [X,W] = Ut.inttet(4);
+            val = 0;
+            for p=1:length(W)
+                Xp = X(p,:)';
+                Xp = J*Xp + v1;
+                val = val + f(Xp)*W(p);
+            end
+
+            integ = val*det(J);
+
         end
+        
         function A=UTtoSYM3D(obj,A)
             %Convert upper triangular to symmetric matrix
             A=A + permute(A,[2,1,3])-bsxfun(@times, eye(size(A(:,:,1))), A);

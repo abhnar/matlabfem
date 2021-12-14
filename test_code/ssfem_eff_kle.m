@@ -29,11 +29,12 @@ kle.getKLEData(1);
 kle.setSD([0.8 0.5 0.4 ]);
 kle.setNKL([3 3 3]);
 
+
 %% Spectral Stochastic
 ssfem.init(20000,'kle',true,'p_order',2);
 
 ssfem.setSeed(1);
-ssfem.assignSpatialMaterialVariation(kle);
+ssfem.assignEffectiveMaterialVariation(kle,'full');
 ssfem.ssfemkle(f);
 ssfem.plot('current');
 hold on;

@@ -16,7 +16,51 @@ classdef MonteCarlo< SFEM
     methods
         
         
-       
+        function assignEffectiveMaterialVariation(mc, kle, level)
+            if(nargin ==2) level = 'full';  end;
+
+            assignEffectiveMaterialVariation@SFEM(mc, kle, 'SSFEM');
+            
+            kle.getEffectiveKL();
+
+            epsr = mc.MeshData.MatLibrary(mc.MeshData.TetType);
+
+            %repeat epsr  Rn times, there are Rn columns, each column is a
+            %sample
+            epsr = repmat(epsr,[1 mc.Rn]);
+            mc.SETUP.N = kle.getSdim();
+            rng(mc.seed);
+            mc.xi = randn(mc.Rn,length(kle.KLSet));
+
+            for j = 1:length(kle.KLSet)
+                KL = kle.KLSet{j};
+
+
+                mat_idx = find(mc.MeshData.TetType == KL.domain);
+                xi_i = mc.xi(:,j)'; % Rn columns, 1 Row
+                xi_i = repmat(xi_i,[mc.MeshData.NT,1]); %Rn columns, NT rows
+               
+                if strcmp(level,'element')
+                    K = KL.CORR.K_e;
+                elseif strcmp(level,'full')
+                    K = KL.CORR.K;
+                end
+                
+                epsr(mat_idx,:) = epsr(mat_idx,:) + K.*xi_i(mat_idx,:)*KL.sd;
+                mc.epsilon_r = epsr;
+                mean_sd = mean(std(epsr(mat_idx,:)'));
+                cprintf('*black','\tMean Standard Deviation of domain %d: %f\n',KL.domain, mean_sd);
+            end
+
+            mc.SETUP.domains = kle.getDomains();
+            mc.SETUP.sds = kle.getSDs();
+            mc.SETUP.nkls = kle.getNKLs();
+            mc.SETUP.means = mc.getPermittivity(mc.SETUP.domains);
+            mc.SETUP.type = 'MCS_EFF_KLE';
+            mc.SETUP.p_order = -1;
+
+
+        end
         
     
         function assignRandomMaterialVariation(mc, domains,sds)

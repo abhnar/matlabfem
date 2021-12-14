@@ -225,9 +225,11 @@ classdef KLE3D < handle
                             printprogress(i + (j-1)*size(tet,1),size(tet,1)*llim);
                         end
                         Phi{j} = phi_centroid/sqrt(val);
+                        norms(j) = sqrt(val);
                         %                         disp(sqrt(val));
                     end
                     kle.KLSet{domnum}.CORR{it}.Phi =  Phi;
+                    kle.KLSet{domnum}.CORR{it}.Norms = norms;
                 end
             end
 
@@ -406,6 +408,70 @@ classdef KLE3D < handle
             %h=figure;
             %disp(val);
 
+        end
+        
+        function sds =getEffSD(kle)
+            sds = kle.getSDs();
+            for i=1:length(kle.KLSet)
+                sds(i) = sds(i)*kle.KLSet{i}.CORR.K;
+            end
+        end
+        function getEffectiveKL(kle)
+            nkls = kle.getNKLs();
+            
+            for j=1:length(kle.KLSet)
+                
+                KL = kle.KLSet{j};
+                a = KL.supSet.Co(:,:,1);
+                b = KL.supSet.Co(:,:,2);
+                c = KL.supSet.Co(:,:,3);
+                d = KL.supSet.Co(:,:,4);
+
+
+                ix1 = KL.supSet.ix1;
+                nds = KL.supSet.nds;
+                tet = KL.supSet.tet;
+                V = KL.supSet.V;
+               
+                K = 0;
+                
+                K_e = zeros(size(KL.CORR.Phi{1}));
+                
+                for i = 1:nkls(j)
+                    %Evaluate volume integral Phi_i and divide by volume 
+                    %then store in KL.CORR.K(i)
+                    eigvec = KL.CORR.Evec(:,i);
+                    lambda_i = KL.CORR.Lambda(i); 
+                    Phi_i = KL.CORR.Phi{i};
+                    integ = 0;
+                    K_e_i = zeros(size(KL.CORR.Phi{1}));
+                    Ki = 0;
+                    for e=1:length(tet)
+                        gix = ix1(e);
+                        lix = e;
+                        Xc=mean(nds(tet(lix,:),:));
+
+                        Ut = Utilities;
+                        int = 0;
+                        for k=1:4
+                            Nk = @(x) 1/(6*V(lix))*(a(lix,k)+b(lix,k)*x(1) +c(lix,k)*x(2)+d(lix,k)*x(3))*eigvec(tet(lix,k));
+                            int = int + Ut.volumeIntegral(Nk, nds( tet(lix,:),:), Xc);
+                        end
+                        integ = integ + int;
+                        K_e_i(gix) = int/V(lix);
+                        
+                    end
+                    K_i = (integ/KL.CORR.Norms(i)*sqrt(lambda_i))^2;
+                    K = K + (integ/KL.CORR.Norms(i)*sqrt(lambda_i))^2;
+                    K_e = K_e + (Phi_i*sqrt(lambda_i)).^2;
+                    %K_e_i/KL.CORR.Norms(i) is same as Phi_i
+%                   K = K + (mean(K_e_i(K_e_i~=0))/KL.CORR.Norms(i)*sqrt(lambda_i)).^2;
+
+                end
+
+                kle.KLSet{j}.CORR.K = sqrt(K)/kle.KLSet{j}.Volume;
+                kle.KLSet{j}.CORR.K_e = sqrt(K_e);
+            end
         end
     end
 end

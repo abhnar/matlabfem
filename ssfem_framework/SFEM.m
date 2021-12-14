@@ -101,7 +101,21 @@ classdef SFEM < handle & EFEM
             cprintf('*black','\tInput Standard Deviation: %2.2f\n', sd);
         end
         
-
+        function assignEffectiveMaterialVariation(ssfem, kle,type)
+           cprintf('*Blue','----------------------------------------------------------\n');
+            cprintf('*Blue','         %s Simulation (KLE - Spatial Effective)         \n', type);
+            cprintf('*Blue','---------------------------------------------------------\n');
+            
+            ndom = length(kle.KLSet);
+            cprintf('*black','\tRandom seed       : %d\n', ssfem.seed);
+            cprintf('*black','\tNumber of Domains : %d\n', ndom);
+            for i=1:ndom
+                cprintf('*black','\t\tDomain : %d\n', kle.KLSet{i}.domain);
+                cprintf('*black','\t\t\tStandard Deviation     : %2.2f\n', kle.KLSet{i}.sd);
+                cprintf('*black','\t\t\tCorrelation Length     : %e m (factor = %2.2f)\n', kle.KLSet{i}.CORR.corlen, kle.KLSet{i}.corlenfactor);
+                cprintf('*black','\t\t\tNumber of KL Terms     : %d\n', kle.KLSet{i}.nkl);
+            end
+        end
         function assignSpatialMaterialVariation(ssfem, kle, type)
             %% Generate samples that are spatially correlated. The spatial
             %  correlation is represented by the KL Expansion

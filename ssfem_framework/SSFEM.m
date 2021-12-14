@@ -9,6 +9,68 @@ classdef SSFEM<  SFEM
    
     methods
         
+          function assignEffectiveMaterialVariation(ssfem, kle, level)
+            if(nargin ==2) level = 'full';  end;
+
+            assignEffectiveMaterialVariation@SFEM(ssfem, kle, 'SSFEM');
+            domains = kle.getDomains();
+            kle.getEffectiveKL();
+            sds = kle.getSDs();
+            sds_ = kle.getEffSD();
+
+            ssfem.SETUP.TSet = cell(length(domains),1);
+            for it = 1:length(domains)
+                domain = domains(it);
+                
+
+                ssfem.buildSystem();
+                
+               
+                
+                temp=ssfem.MeshData.TetType;
+                temp(temp~=domain)=0;
+                temp(temp==domain)=1;
+                if(strcmp(level,'full'))
+                    sd = sds_(it);
+                    epr = sd.*(temp);
+                elseif(strcmp(level,'element'))
+                    sd = sds(it);
+                    epr = temp;
+                    epr = epr.*kle.KLSet{it}.CORR.K_e*sd;
+                end
+                
+                ssfem.Assemble(epr);
+                
+                ssfem.SETUP.Tset{it+1} = ssfem.T;
+                
+                ssfem.SETUP.Tset{it+1}(ssfem.pecedge,:) = [];
+                ssfem.SETUP.Tset{it+1}(:,ssfem.pecedge) = [];
+                
+            end
+            ssfem.SETUP.N = length(domains);
+            ssfem.SETUP.P = PC.getP(ssfem.SETUP.N,ssfem.p_order);
+            ssfem.SETUP.cijk = PC.c_ijk(ssfem.SETUP.N,ssfem.p_order,1);
+            ssfem.SETUP.Psi = PC.getHermite_PC(ssfem.SETUP.N,ssfem.p_order);
+
+
+            ssfem.SETUP.domains = domains;
+            ssfem.SETUP.means = ssfem.getPermittivity(ssfem.SETUP.domains);
+            ssfem.SETUP.sds = sds;
+            ssfem.SETUP.type = 'SSFEM_EFF_KLE';
+
+            ssfem.SETUP.nkls = zeros(size(sds));
+            ssfem.SETUP.p_order = ssfem.p_order;
+
+            rng(ssfem.seed);
+            ssfem.xi = randn(ssfem.Rn,ssfem.SETUP.N);
+
+            fprintf('\t');
+            cprintf('_black','Stochastic Setup\n');
+            cprintf('*black','\t\tN : %d\n', ssfem.SETUP.N);
+            cprintf('*black','\t\tP : %d\n', ssfem.SETUP.P);
+ 
+        end
+      
         
         function assignRandomMaterialVariation(ssfem, domains, sds)
             
