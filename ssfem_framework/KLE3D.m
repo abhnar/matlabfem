@@ -9,7 +9,7 @@ classdef KLE3D < handle
         Vol
         RAW
         Norms
-        CORR
+        CORRALL
         KLDATA
         crfracs = [0.1 0.25 0.5 0.75 1 2 5 10];
         KLSet
@@ -61,7 +61,7 @@ classdef KLE3D < handle
 
 
             for i=1:length(kle.KLSet)
-                kle.KLSet{i}.CORR = kle.KLSet{i}.CORR{ixs(i)};
+                kle.KLSet{i}.CORR = kle.KLSet{i}.CORRALL{ixs(i)};
                 kle.KLSet{i}.corlenfactor = corlenfrac;
                 ret =  kle.KLSet{i}.CORR;
             end
@@ -147,16 +147,16 @@ classdef KLE3D < handle
                     supSet.ix1 = ix1;
 
                     DATA.supSet = supSet;
-                    DATA.CORR = kle.CORR;
+                    DATA.CORRALL = kle.CORRALL;
 
-                    for it = 1:length(DATA.CORR)
-                        %DATA.CORR{it}.domain = domain;
-                        DATA.CORR{it}.corlen = maxdim*kle.crfracs(it);
-                        DATA.CORR{it}
+                    for it = 1:length(DATA.CORRALL)
+                        %DATA.CORRALL{it}.domain = domain;
+                        DATA.CORRALL{it}.corlen = maxdim*kle.crfracs(it);
+                        
                     end
 
                     KL.supSet = DATA.supSet;
-                    KL.CORR =  DATA.CORR;
+                    KL.CORRALL =  DATA.CORRALL;
                     KL.Volume = sum(V);
                     KL.domain = domain;
                     save(klfname,'KL');
@@ -174,7 +174,17 @@ classdef KLE3D < handle
                     error("Input should be ''nlambda''");
                 end
             end
-
+            if(length(varargin) == 4)
+                if(~strcmp(varargin{1},'nlambda'))
+                    error("Input should be ''nlambda''");
+                end
+                 if(~strcmp(varargin{3},'corlens'))
+                    error("Input should be ''corlens''");
+                 end
+                 corls = varargin{4};
+            else
+                corls = kle.crfracs;
+            end
             fprintf('Evaluating Eigen Function \n');
             for domnum = 1:length(kle.KLSet)
                 a = kle.KLSet{domnum}.supSet.Co(:,:,1);
@@ -188,21 +198,25 @@ classdef KLE3D < handle
                 tet = kle.KLSet{domnum}.supSet.tet;
                 V = kle.KLSet{domnum}.supSet.V;
 
-                for it = 1:length(kle.KLSet{domnum}.CORR)
-                    %                     normset = kle.KLSet{domnum}.CORR{it}.Norms;
-                    llim = min(length(kle.KLSet{domnum}.CORR{it}.Lambda), varargin{2});
+                for it_ = 1:length(corls)
+                    it = find(kle.crfracs == corls(it_));
+                    
+                    %                     normset = kle.KLSet{domnum}.CORRALL{it}.Norms;
+                    llim = min(length(kle.KLSet{domnum}.CORRALL{it}.Lambda), varargin{2});
                     fprintf('for fraction %f\n',kle.crfracs(it));
                     Phi = {};
+                    
                     for j = 1: llim
-                        eigvec = kle.KLSet{domnum}.CORR{it}.Evec(:,j);
+                        eigvec = kle.KLSet{domnum}.CORRALL{it}.Evec(:,j);
 
                         phi_centroid=zeros(kle.KLSet{domnum}.supSet.NTg,1);
                         val = 0;
+                        centroids = zeros(length(tet),3);
                         for i=1:length(tet)
                             gix = ix1(i);
                             lix = i;
                             Xc=mean(nds(tet(lix,:),:));
-
+                            centroids(i,:) = Xc;
                             field_centroid=0;
                             for k=1:4
                                 Lk = @(x) 1/(6*V(lix))*(a(lix,k)+b(lix,k)*x(1) +c(lix,k)*x(2)+d(lix,k)*x(3));
@@ -228,8 +242,9 @@ classdef KLE3D < handle
                         norms(j) = sqrt(val);
                         %                         disp(sqrt(val));
                     end
-                    kle.KLSet{domnum}.CORR{it}.Phi =  Phi;
-                    kle.KLSet{domnum}.CORR{it}.Norms = norms;
+                    kle.KLSet{domnum}.CORRALL{it}.Phi =  Phi;
+                    kle.KLSet{domnum}.CORRALL{it}.Norms = norms;
+                    kle.KLSet{domnum}.supSet.Centroids = centroids;
                 end
             end
 
@@ -345,7 +360,7 @@ classdef KLE3D < handle
 
         end
         function ret =calcEig_Multiple(obj,n)
-            obj.CORR = {};
+            obj.CORRALL = {};
             B=obj.Bmat;
             for it = 1:length(obj.Cmat)
                 fprintf('For corrlen frac %2.2f\n',obj.crfracs(it));
@@ -364,8 +379,8 @@ classdef KLE3D < handle
                 obj.Lambda = eval1;
                 obj.Evec = eigvec(:,ix);
 
-                obj.CORR{it}.Lambda=eval1;
-                obj.CORR{it}.Evec=eigvec(:,ix);
+                obj.CORRALL{it}.Lambda=eval1;
+                obj.CORRALL{it}.Evec=eigvec(:,ix);
 
                 ret=eval1(1:n);
 
@@ -439,7 +454,7 @@ classdef KLE3D < handle
                 
                 for i = 1:nkls(j)
                     %Evaluate volume integral Phi_i and divide by volume 
-                    %then store in KL.CORR.K(i)
+                    %then store in KL.CORRALL.K(i)
                     eigvec = KL.CORR.Evec(:,i);
                     lambda_i = KL.CORR.Lambda(i); 
                     Phi_i = KL.CORR.Phi{i};
@@ -464,8 +479,8 @@ classdef KLE3D < handle
                     K_i = (integ/KL.CORR.Norms(i)*sqrt(lambda_i))^2;
                     K = K + (integ/KL.CORR.Norms(i)*sqrt(lambda_i))^2;
                     K_e = K_e + (Phi_i*sqrt(lambda_i)).^2;
-                    %K_e_i/KL.CORR.Norms(i) is same as Phi_i
-%                   K = K + (mean(K_e_i(K_e_i~=0))/KL.CORR.Norms(i)*sqrt(lambda_i)).^2;
+                    %K_e_i/KL.CORRALL.Norms(i) is same as Phi_i
+%                   K = K + (mean(K_e_i(K_e_i~=0))/KL.CORRALL.Norms(i)*sqrt(lambda_i)).^2;
 
                 end
 

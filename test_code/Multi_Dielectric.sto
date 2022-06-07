@@ -1,0 +1,15 @@
+BEGIN
+model:./models/Multi_Dielectric
+mats:1, 9-0.018j, 6-0.012j, 6-0.012j, 6-0.012j, 1.2-0.0024j, 1.2-0.0024j
+stochdoms:2,3
+stds:0.1,0.5
+klns:3,3
+crlens:0.5
+p_order:4
+frequency:d:2.5,2.6
+seed:1
+Rn:20000
+type:kle_eff
+tag:Test the timing of higer order PCE
+END
+

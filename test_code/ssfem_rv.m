@@ -24,6 +24,6 @@ ssfem.init(100,'kle',false,'p_order',2);
 
 ssfem.setSeed(1);
 ssfem.assignRandomMaterialVariation([2 3 4], [0.8 0.5 0.4]);
-ssfem.ssfemkle(f);
+ssfem.ssfemsimulation(f);
 
 ssfem.plot('current')

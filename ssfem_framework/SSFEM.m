@@ -3,19 +3,243 @@ classdef SSFEM<  SFEM
 
         d_stoch;
         show_progress = true;
-
+        loadedresult;
         
     end
    
     methods
+        function analyseresult(ssfem,cmd, id)
+            if strcmp(cmd,'load')
+                id = fopen('results/femlog.txt');
+                line = fgetl(id);
+                ids = [];
+                res = {};
+                cnt = 1;
+                idmap = [];
+                fmap = {};
+                type = {};
+                while(line~=-1)
+                    tmp = strsplit(line, ' ');
+                    if ~(ismember(str2double(tmp{1}), ids))
+                        ids = [ids str2double(tmp{1})];
+                    end
+                    
+                    res{cnt} = line;
+                    idmap(cnt) = str2double(tmp{1});
+                    t = split(tmp{4},'/');t = t{end};
+                    type{cnt} = tmp{5};
+                    fmap{cnt} = replace(['results/', t,tmp{2},'_', tmp{3},'.mat'],':','-');
+                    cnt = cnt + 1;
+                    line = fgetl(id);
+                    
+                    
+                end
+                fclose(id);
+                ssfem.loadedresult.ids = ids;
+                ssfem.loadedresult.res = res;
+                ssfem.loadedresult.fmap = fmap;
+                ssfem.loadedresult.idmap = idmap;
+            end
+            if strcmp(cmd,'list')
+                disp(ssfem.loadedresult.ids');
+            end
+            if strcmp(cmd,'band')
+                cnt = 0;
+                flist = ssfem.loadedresult.fmap(ssfem.loadedresult.idmap == id);
+                for i=1:length(flist)
+                    load(flist{i});
+                    [y,x] = ksdensity(T);
+                    cnt = cnt+1;
+                    mn(cnt) = mean(T);
+                    Tu = T(T>=mn(cnt));
+                    Td = T(T<=mn(cnt));
+                    sd(cnt) = std(T);
+                    sdu(cnt) = std(Tu);
+                    sdd(cnt) = std(Td);
+                    freq(cnt) = f;
+                end
+                [freq,ix] = sort(freq);
+                mn = mn(ix);
+                sdu = sdu(ix);
+                sdd=sdd(ix);
+                hold on;
+                patch([freq fliplr(freq)], [mn+sdu*3 fliplr(mn-sdd*3)], 'g', 'facealpha', 0.5)
+                plot(freq,mn);
+                ssfem.loadedresult.freq = freq;
+                
+            end
+
+             if strcmp(cmd,'table')
+                cnt = 0;
+                flist = ssfem.loadedresult.fmap(ssfem.loadedresult.idmap == id);
+                tps = cell(length(flist),1);
+                for i=1:length(flist)
+                    load(flist{i});
+                    [y,x] = ksdensity(T);
+                    cnt = cnt+1;
+                    mn(cnt) = mean(T);
+                    Tu = T(T>=mn(cnt));
+                    Td = T(T<=mn(cnt));
+                    sd(cnt) = std(T);
+                    sdu(cnt) = std(Tu);
+                    sdd(cnt) = std(Td);
+                    freq(cnt) = f;
+                    tps{cnt} = type;
+                end
+                [freq,ix] = sort(freq);
+                mn = mn(ix);
+                sdu = sdu(ix);
+                sdd=sdd(ix);
+                sd=sd(ix);
+                fprintf("slno\tfrequency\t   Mean\t     std\n")
+                fprintf('-----------------------------------------\n')
+                for i =1:length(freq)
+                    fprintf("%4d\t%3.6f\t%1.6f\t%1.6f\t%s\n", i, freq(i),mn(i),sd(i), tps{i});
+                end
+                
+            end
         
-          function assignEffectiveMaterialVariation(ssfem, kle, level)
-            if(nargin ==2) level = 'full';  end;
+        end
+        
+        function execute(ssfem,fn, id)
+        if(nargin ==3)
+          exec_id = id;
+        else
+          exec_id = round(rand*1e5);  
+        end
+        fprintf('Execution id: %d\n', exec_id);
+            
+            id = fopen(fn);
+            line = fgetl(id);
+            status = 0;
+            while(line~=-1)
+%                 disp(line);
+                if status == 0
+                    if(strcmp(line,'BEGIN'))
+                        status = 1;
+                    end
+                else
+                    model = split(line,':');
+                    model = model{2};
+                    
+                    mats = split(fgetl(id),':');
+                    mats = split(strtrim(mats{2}),',');
+                    mats = str2double(mats);
+                    
+                    doms = split(fgetl(id),':');
+                    doms = split(strtrim(doms{2}),',');
+                    doms = str2double(doms);
+                    
+                    stds = split(fgetl(id),':');
+                    stds = split(strtrim(stds{2}),',');
+                    stds = str2double(stds);
+                    
+                    klns = split(fgetl(id),':');
+                    klns = split(strtrim(klns{2}),',');
+                    klns = str2double(klns);
+                    
+                    corlen = split(fgetl(id),':');
+                    corlen = str2double(strtrim(corlen{2}));
+                    
+                    p = split(fgetl(id),':');
+                    p = str2double(strtrim(p{2}));
+                    
+                    freq = split(fgetl(id),':');
+                    
+                    if(strcmp('r',freq{2}))
+                        freq = split(freq{3},',');
+                        freq = linspace(str2double(freq{1}),str2double(freq{2}),str2double(freq{3}));
+                    elseif(strcmp('d',freq{2}))
+                         freq = split(freq{3},',');
+                         freq = str2double(freq);
+                    else
+                        error("Freq type should be either 'r' or 'd'");
+                    end
+                   
+                    
+                    seed = split(fgetl(id),':');
+                    seed = str2double(strtrim(seed{2}));
+                    
+                    Rn = split(fgetl(id),':');
+                    Rn = str2double(strtrim(Rn{2}));
+                    
+                    type = split(fgetl(id),':');
+                    type = strtrim(type{2});
+                    
+                    tag = split(fgetl(id),':');
+                    tag = strtrim(tag{2});
+                    status = 0;
+                    
+                    ssfem.verbose = 0;
+                    ssfem.LoadMesh(model);
+                    ssfem.meshStatistics();
+                   
+                    ssfem.setMaterials(mats);
+                    ssfem.buildSystem();
+                    
+                    
+                    
+                    %% KLE Setup
+                    kle = KLE3D;
+                    kle.process(ssfem,doms);
+                    kle.evaluate_Phi('nlambda',max(klns),'corlens',corlen);
+                    kle.getKLEData(corlen);
+                    kle.setSD(stds);
+                    kle.setNKL(klns);
+                    ssfem.init(Rn,'kle',true,'p_order',p);
+                    
+                    ssfem.setSeed(seed);
+                    if strcmp(type,'kle')
+                        ssfem.assignSpatialMaterialVariation(kle);
+                    elseif strcmp(type,'kle_eff')
+                        kle.getEffectiveKL();
+                        ssfem.assignEffectiveMaterialVariation(kle);
+                    end
+                    for i =1:length(freq)
+                        f = freq(i);
+                       
+                        ssfem.ssfemsimulation(f);
+                        dt = datestr(datetime);
+                        s = sprintf('%5d %20s %20s %10s %15s %15s %15s %2.2f %10s %2d %3d %3.6f %2.6f %2.6f %3.6f %s\n',exec_id,dt, ssfem.Meshfile,type,['[',sprintf('%d,',doms),']'],...
+                           ['[',sprintf('%2.2f,',real(ssfem.getPermittivity(doms))),']'], ['[',sprintf('%2.3f,',stds),']'], corlen, ['[',sprintf('%d,',klns),']'], ...
+                            p, ssfem.RESULTS.P,f,ssfem.RESULTS.means21, ssfem.RESULTS.stds21,  ssfem.RESULTS.solvetime, tag);
+                        logfid = fopen('results/femlog.txt','a+');
+                        fwrite(logfid,s);
+                        fclose(logfid);
+                        
+                        fname = split(ssfem.Meshfile,'/');
+                        fname = ['results/', fname{end}, strrep(strrep(dt,':','-'),' ','_') ,'.mat'];
+                        T = ssfem.RESULTS.T;
+                        [pdfy,pdfx] = ksdensity(ssfem.RESULTS.T);
+                        save(fname, 'pdfx','pdfy','T','f','dt','p','type','exec_id','tag');
+                        ssfem.clearresults();
+
+                    end
+                    
+                    
+                    
+                end
+                line = fgetl(id);
+            end
+            
+            fclose(id);
+        
+        end
+        function clearresults(ssfem)
+            ssfem.CACHE = [];
+            ssfem.RESULTS = [];
+            ssfem.SETUP.Et = [];
+        end
+        function assignEffectiveMaterialVariation(ssfem, kle, level)
+            if(nargin ==2) 
+                level = 'full'; 
+            end
 
             assignEffectiveMaterialVariation@SFEM(ssfem, kle, 'SSFEM');
             domains = kle.getDomains();
-            kle.getEffectiveKL();
+            
             sds = kle.getSDs();
+            kle.getEffectiveKL();
             sds_ = kle.getEffSD();
 
             ssfem.SETUP.TSet = cell(length(domains),1);
@@ -31,7 +255,7 @@ classdef SSFEM<  SFEM
                 temp(temp~=domain)=0;
                 temp(temp==domain)=1;
                 if(strcmp(level,'full'))
-                    sd = sds_(it);
+                    sd  = sds_(it);
                     epr = sd.*(temp);
                 elseif(strcmp(level,'element'))
                     sd = sds(it);
@@ -166,7 +390,7 @@ classdef SSFEM<  SFEM
         
         end
         
-        function ssfemkle(ssfem,f)
+        function ssfemsimulation(ssfem,f)
             ssfem.buildSystem();
             [K, b]=ssfem.buildDeterministicSystem(f);
             
@@ -186,6 +410,18 @@ classdef SSFEM<  SFEM
             X = cell(ssfem.SETUP.P,ssfem.SETUP.P);
             Y = cell(ssfem.SETUP.P,ssfem.SETUP.P);
             VALS = cell(ssfem.SETUP.P,ssfem.SETUP.P);
+
+            TSet = Tset;
+            N = ssfem.SETUP.N;
+            P = ssfem.SETUP.P;
+           
+            
+            
+           
+            G=zeros(Ndof*P,1);
+            G(1:Ndof)=b;
+            
+%            save('C:\Users\abhijith\workspace\python\python_ssfem_with_MATLAB\SETUP.mat','TSet','G','cijk','P','N')
 
             if(ssfem.show_progress)
                 wb = waitbar(0,"Assembling SSFEM",'Name', 'SSFEM');
@@ -238,15 +474,16 @@ classdef SSFEM<  SFEM
             Y = vertcat(Y{:});
             VALS= vertcat(VALS{:});
             ST = sparse(X,Y,VALS);
+            ssfem.RESULTS.NZ = (nnz(ST));
+            
             clear X Y VALS S x y val;
             
-            G=zeros(Ndof*P,1);
-            G(1:Ndof)=b;
-            fprintf('Solving\n');
+            
+            fprintf('Solving at frequency %f\n',f);
             tic;
             xr = ST\G;
             t1 = toc;
-            cprintf('*black','\tSolution time     : %f sec\n', t1);
+          
             ssfem.d_stoch = reshape(xr,Ndof,P);
             
             
@@ -266,8 +503,9 @@ classdef SSFEM<  SFEM
             ssfem.RESULTS.sds = ssfem.SETUP.sds;
             ssfem.RESULTS.nkls = ssfem.SETUP.nkls;
             ssfem.RESULTS.solvetime = t1;
-            ssfem.RESULTS.N = size(ST,1);
-            ssfem.RESULTS.NZ = nnz(ST);
+            disp(t1);
+%             ssfem.RESULTS.N = size(ST,1);
+%             ssfem.RESULTS.NZ = nnz(ST);
             ssfem.RESULTS.P=P;
             ssfem.RESULTS.p_order=ssfem.SETUP.p_order;
             
@@ -319,76 +557,7 @@ classdef SSFEM<  SFEM
             
         end
         
-        function ssfemrv(ssfem,f)
-            
-            ssfem.buildSystem();
-            [K, b]=ssfem.buildDeterministicSystem(f);
-            T =-ssfem.K0^2* ssfem.RV.T;
-          
-            Tset = cell(2,1);
-            Tset{1}=K;
-            Tset{2}=T;
-            [cijk,P]=PC.c_ijk(1,ssfem.p_order,1);
-            ssfem.RESULTS.P = ssfem.p_order;
-            ssfem.RESULTS.type = 'RV';
-            Ndof = size(K,1);
-            Stemp = cell(P,P);
-            ST = cell(P);
-            for j = 1 : P
-                
-                for k = 1 : P
-                    S = sparse(Ndof,Ndof);
-                    
-                    for i =1 : 2
-                        S =  S + cijk{i}(j,k) * Tset{i};
-                    end
-                    Stemp{j,k}=S;
-                    
-                    
-                end
-                
-                ST{j}=horzcat(Stemp{j,:});
-                
-            end
-
-            ST=vertcat(ST{:});
-            clear Stemp;
-            
-            G=zeros(Ndof*P,1);
-            G(1:Ndof)=b;
-            disp('Solving');
-            tic;
-            xr = ST\G;
-            t1 = toc;
-            ssfem.d_stoch = reshape(xr,Ndof,P);
-            ssfem.RESULTS.solvetime = t1;
-            ssfem.RESULTS.N = size(ST,1);
-            ssfem.RESULTS.NZ = nnz(ST);
-            d = ssfem.d_stoch;
-            disp('Evaluating PCE');
-            Psi=PC.getHermite_PC(1,ssfem.p_order);
-            u  = zeros(Ndof,ssfem.Rn);
-            
-            for j = 1:P
-                psi_j = Psi{j}(ssfem.xi);
-                d_j   = d(:,j);
-                u= u + d_j*psi_j';
-                printprogress(j,P);
-            end
-            
-            ins=(1:ssfem.MeshData.NEdges);
-            ins(ssfem.pecedge)=0;
-            Et=zeros(ssfem.MeshData.NEdges,ssfem.Rn);
-            Et(ins~=0,:)=u;
-            
-            ssfem.calcTrans_Stoch(Et);
-            ssfem.RESULTS.f = f;
-            ssfem.RESULTS.seed = ssfem.seed;
-            
-            ssfem.pushResult();
-            
-        end
-
+     
         function trans = calcTrans_Stoch(obj,E)
             
             if(obj.evan)

@@ -42,15 +42,17 @@ classdef EFEM  < handle
            
             if ~ strcmp(obj.MeshData.BDATA(1,1),"")
                 fprintf('Boundary Tags\n----------------\n')
-                for i=1:length(obj.MeshData.BDATA)
-                    fprintf("\t%s\t%s\n",obj.MeshData.BDATA(i,1),obj.MeshData.BDATA(i,2));
+                for i=1:size(obj.MeshData.BDATA,1)
+                    fprintf("\t%10s\t%s\n",obj.MeshData.BDATA(i,1),obj.MeshData.BDATA(i,2));
                 end
             end
             fprintf('\nDomain Tags\n----------------\n')
             for i=1:size(obj.MeshData.DDATA,1)
-                fprintf("\t%s\t%s\n",obj.MeshData.DDATA(i,1),obj.MeshData.DDATA(i,2));
+                fprintf("\t%10s\t%s\n",obj.MeshData.DDATA(i,1),obj.MeshData.DDATA(i,2));
             end
             fprintf('\n');
+            fprintf('*%30s: %d\n', "Number of Tetrahedrons", obj.MeshData.NT);
+            fprintf('*%30s: %d\n',"Number of edges", obj.MeshData.NEdges);
         end
         function obj = LoadMesh(obj,filename)
             

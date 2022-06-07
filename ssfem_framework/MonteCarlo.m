@@ -47,6 +47,7 @@ classdef MonteCarlo< SFEM
                 end
                 
                 epsr(mat_idx,:) = epsr(mat_idx,:) + K.*xi_i(mat_idx,:)*KL.sd;
+                
                 mc.epsilon_r = epsr;
                 mean_sd = mean(std(epsr(mat_idx,:)'));
                 cprintf('*black','\tMean Standard Deviation of domain %d: %f\n',KL.domain, mean_sd);
@@ -93,7 +94,7 @@ classdef MonteCarlo< SFEM
         end
 
 
-        function assignSpatialMaterialVariation(mc, kle)
+        function ret = assignSpatialMaterialVariation(mc, kle)
             %% Generate samples that are spatially correlated. The spatial
             %  correlation is represented by the KL Expansion
 
@@ -114,7 +115,7 @@ classdef MonteCarlo< SFEM
 
                 mat_idx = find(mc.MeshData.TetType == KL.domain);
                
-                
+                ret = zeros(100,4);
                 %KL sum mean + Sigma_i=1^nkl sqrt(Lambda_i)*Phi_i*x_i;
                 for i=1:KL.nkl
                     
@@ -127,7 +128,19 @@ classdef MonteCarlo< SFEM
                    
                     xi_i = mc.xi(:,k)'; % Rn columns, 1 Row
                     xi_i = repmat(xi_i,[mc.MeshData.NT,1]); %Rn columns, NT rows
+                    tmp = epsr(mat_idx,:);
                     epsr = epsr + sqrt(lambda_i)*Phi_i.*xi_i*KL.sd;
+                    ret(i,1) = max(mean(abs(tmp - 4.3)));
+                    ret(i,2) = mean(mean(abs(tmp - 4.3)));
+                    ret(i,3) = max(mean(abs(tmp - epsr(mat_idx,:))));
+                    ret(i,4) = mean(mean(abs(tmp - epsr(mat_idx,:))));
+                    ret(i,5) = vecnorm(mean(abs(tmp - 4.3)));
+                    ret(i,6) =  mean(std((tmp - 4.3)));
+
+                    fprintf('Max  diff for %d KLterms from det  = %f\n',i, max(mean(abs(tmp - 4.3))));
+                    fprintf('Mean diff for %d KLterms from det  = %f\n',i, mean(mean(abs(tmp - 4.3))));
+                    fprintf('Max  error for %d KLterms          = %f\n',i, max(mean(abs(tmp - epsr(mat_idx,:)))));
+                    fprintf('Mean error for %d KLterms          = %f\n-----\n',i, mean(mean(abs(tmp - epsr(mat_idx,:)))));
                 end
                 mc.epsilon_r = epsr;
                 mean_sd = mean(std(epsr(mat_idx,:)'));
