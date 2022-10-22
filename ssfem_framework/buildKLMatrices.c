@@ -1,3 +1,8 @@
+// Filename: buildKLMatrices.c
+// Author:   Abhijith B N
+// email:    abhijithbn@gmail.com
+// Desc:     Faster way to assemble KL expansion eigen value problem matrics.
+
 #include <math.h>
 #include<stdio.h>
 #include "mex.h"
