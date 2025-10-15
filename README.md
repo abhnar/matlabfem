@@ -2,7 +2,7 @@
 # Author: Abhijith B N
 # email : abhijithbn@gmail.com
 # created for the PhD thesis, "Stochastic Finite Element Modeling of Material and Geometric Uncertainties in Electromagnetics"
-# The codes will be publisized after publication.
+
 
 Designing MATLAB Finite Element Tool for Elecctormagnetics.
 
